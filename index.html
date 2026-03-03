@@ -1,40 +1,1247 @@
 <!DOCTYPE html>
 <html lang="hu">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NKE RTK Alapkiképzés Órarend Tervező</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Ikonok -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Egyedi gördítősáv a táblázathoz */
-        .custom-scrollbar::-webkit-scrollbar { height: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .loader {
-            border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%;
-            width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NKE RTK Alapkiképzés Órarend</title>
+
+<!-- Firebase Compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- FontAwesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+  :root {
+    --navy: #0D1B2A;
+    --navy2: #1B2A3A;
+    --gold: #C8962A;
+    --gold-light: #F5C242;
+    --border: #D1D9E0;
+    --bg: #F0F4F8;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: 'Barlow', sans-serif; background: var(--bg); min-height: 100vh; }
+  h1, h2, h3, h4, .cond { font-family: 'Barlow Condensed', sans-serif; }
+
+  /* ---- SCROLLBAR ---- */
+  .scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scrollbar::-webkit-scrollbar-track { background: #E5EBF0; border-radius: 4px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: #9BB0C2; border-radius: 4px; }
+
+  /* ---- SPINNER ---- */
+  .spin { animation: spin 1s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- LOGIN ---- */
+  #login-screen {
+    position: fixed; inset: 0; z-index: 100;
+    background: linear-gradient(135deg, #0D1B2A 0%, #1B3A5C 50%, #0D1B2A 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    background: white; border-radius: 16px;
+    box-shadow: 0 32px 80px rgba(0,0,0,.5);
+    width: 400px; max-width: calc(100vw - 2rem);
+    padding: 3rem 2.5rem;
+    position: relative; overflow: hidden;
+  }
+  .login-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+    background: linear-gradient(90deg, var(--navy) 0%, var(--gold) 100%);
+  }
+  .login-badge {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--navy), #2C4A6A);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 1.5rem;
+    box-shadow: 0 8px 24px rgba(13,27,42,.25);
+  }
+
+  /* ---- HEADER ---- */
+  #header {
+    background: var(--navy);
+    position: sticky; top: 0; z-index: 50;
+    box-shadow: 0 4px 20px rgba(0,0,0,.35);
+  }
+  .nav-btn {
+    padding: .45rem 1.1rem; border-radius: 6px; font-size: .85rem;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 600; letter-spacing: .04em;
+    color: #94A3B8; transition: all .2s; cursor: pointer; white-space: nowrap;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,.08); color: white; }
+  .nav-btn.active { background: var(--gold); color: var(--navy); }
+
+  /* ---- SUBJECT COLORS ---- */
+  .subj-altalanos  { background: #EDE9FE; border-color: #7C3AED; color: #4C1D95; }
+  .subj-lo         { background: #FEE2E2; border-color: #DC2626; color: #7F1D1D; }
+  .subj-jogi       { background: #DBEAFE; border-color: #2563EB; color: #1E3A8A; }
+  .subj-kozrend    { background: #FEF3C7; border-color: #D97706; color: #78350F; }
+  .subj-test       { background: #D1FAE5; border-color: #059669; color: #064E3B; }
+  .subj-bevonulas  { background: #F1F5F9; border-color: #64748B; color: #1E293B; }
+  .subj-osztalyfon { background: #CFFAFE; border-color: #0891B2; color: #164E63; }
+  .subj-szabad     { background: #F8FAFC; border-color: #CBD5E1; color: #64748B; }
+  .subj-empty      { background: #F8FAFC; border-color: #E2E8F0; color: #94A3B8; }
+
+  .dot-altalanos  { background: #7C3AED; }
+  .dot-lo         { background: #DC2626; }
+  .dot-jogi       { background: #2563EB; }
+  .dot-kozrend    { background: #D97706; }
+  .dot-test       { background: #059669; }
+  .dot-bevonulas  { background: #64748B; }
+  .dot-osztalyfon { background: #0891B2; }
+  .dot-szabad     { background: #CBD5E1; }
+
+  /* ---- LESSON CARD (DRAG) ---- */
+  .lesson-card {
+    cursor: grab; user-select: none;
+    border-radius: 7px; border-width: 1.5px; border-style: solid;
+    padding: .35rem .5rem;
+    transition: transform .15s, box-shadow .15s, opacity .2s;
+    font-size: .72rem; line-height: 1.3;
+    position: relative;
+  }
+  .lesson-card:active { cursor: grabbing; }
+  .lesson-card.dragging { opacity: .35; transform: scale(.97); }
+  .lesson-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.15); transform: translateY(-1px); z-index: 5; }
+
+  /* ---- DROP ZONE ---- */
+  .drop-cell {
+    transition: background .15s;
+    min-height: 54px;
+    padding: .35rem;
+    border-right: 1px solid #E5EBF0;
+  }
+  .drop-cell.drag-over {
+    background: #EFF6FF !important;
+    outline: 2px dashed #3B82F6;
+    outline-offset: -2px;
+    border-radius: 6px;
+  }
+
+  /* ---- OVERVIEW GRID ---- */
+  .ov-day { min-width: 90px; }
+  .ov-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ---- LOCKED DAY ---- */
+  .day-locked { background: #FFF7ED; }
+
+  /* ---- PROGRESS BAR ---- */
+  .prog-bar { height: 6px; border-radius: 3px; background: #E2E8F0; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+  .prog-ok   { background: #10B981; }
+  .prog-over { background: #F59E0B; }
+  .prog-warn { background: #EF4444; }
+
+  /* ---- MODAL ---- */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 90; display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+  }
+  .modal-box {
+    background: white; border-radius: 14px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.3);
+    width: 600px; max-width: 100%; max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* ---- TOOLTIP ---- */
+  [title]:hover::after {
+    content: attr(title);
+    position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+    background: #1E293B; color: white; padding: .25rem .6rem; border-radius: 5px;
+    font-size: .72rem; white-space: nowrap; pointer-events: none; z-index: 99;
+  }
+
+  /* ---- MISC ---- */
+  .lunch-row { background: linear-gradient(90deg, #FFFBEB, #FEF3C7); }
+  .weekend-col { background: #F8FAFC; }
+  select, input[type=text], input[type=number], input[type=password] {
+    border: 1.5px solid var(--border); border-radius: 7px;
+    padding: .45rem .7rem; outline: none; font-family: 'Barlow', sans-serif;
+    transition: border-color .2s;
+  }
+  select:focus, input:focus { border-color: #3B82F6; }
+  .btn-primary {
+    background: var(--navy); color: white; padding: .55rem 1.3rem;
+    border-radius: 8px; font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700; letter-spacing: .05em; font-size: .95rem;
+    cursor: pointer; transition: background .2s;
+    border: none;
+  }
+  .btn-primary:hover { background: #1B3A5C; }
+  .btn-gold {
+    background: var(--gold); color: white; padding: .55rem 1.3rem;
+    border-radius: 8px; font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700; letter-spacing: .05em; font-size: .95rem;
+    cursor: pointer; transition: background .2s; border: none;
+  }
+  .btn-gold:hover { background: #B07820; }
+
+  /* responsive */
+  @media (max-width: 768px) {
+    .hide-sm { display: none !important; }
+    .cond { letter-spacing: 0; }
+  }
+</style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans min-h-screen">
 
-    <div id="app"></div>
+<body>
 
-    <script>
-        // --- KONSTANSOK ÉS ALAPADATOK ---
-        const START_DATE = new Date('2026-08-24T00:00:00');
-        const END_DATE = new Date('2026-09-25T00:00:00');
-        const GROUPS = ['g1', 'g2']; // I. csoport, II. csoport
-        const GROUP_CAPACITY = 150;
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-badge">
+      <i class="fa-solid fa-shield-halved text-3xl text-white"></i>
+    </div>
+    <h1 class="cond text-center text-2xl font-bold text-gray-900 mb-1" style="letter-spacing:.03em">NKE RTK ALAPKIKÉPZÉS</h1>
+    <p class="text-center text-sm text-gray-500 mb-8">Órarend Tervező · 2026</p>
 
-        const TIME_SLOTS = [
-            { id: 's1', label: '1-2. óra', time: '08:00 - 09:45', isMorning: true },
+    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Jelszó</label>
+    <div class="relative mb-4">
+      <input id="pw-input" type="password" placeholder="Belépési jelszó"
+        class="w-full pr-10" style="font-size:1rem; padding:.65rem .9rem;"
+        onkeydown="if(event.key==='Enter') doLogin()">
+      <button onclick="togglePw()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+        <i class="fa-solid fa-eye text-sm"></i>
+      </button>
+    </div>
+    <div id="login-error" class="hidden text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">
+      <i class="fa-solid fa-circle-exclamation mr-1"></i> Hibás jelszó. Próbáld újra!
+    </div>
+    <button onclick="doLogin()" id="login-btn" class="btn-primary w-full" style="font-size:1.05rem; padding:.7rem;">
+      <i class="fa-solid fa-right-to-bracket mr-2"></i>Belépés
+    </button>
+    <p class="text-center text-xs text-gray-400 mt-5">Rendőrtiszti Főiskolai Kar · NKE</p>
+  </div>
+</div>
+
+<!-- ===================== MAIN APP ===================== -->
+<div id="app" class="hidden">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div class="max-w-[1500px] mx-auto px-4 py-3 flex items-center gap-3 flex-wrap">
+      <!-- Logo + Title -->
+      <div class="flex items-center gap-3 mr-4">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:var(--gold)">
+          <i class="fa-solid fa-calendar-days text-white"></i>
+        </div>
+        <div class="hide-sm">
+          <div class="cond font-bold text-white text-base leading-none" style="letter-spacing:.04em">NKE RTK ALAPKIKÉPZÉS</div>
+          <div class="text-xs text-gray-400">Órarend Tervező 2026</div>
+        </div>
+      </div>
+
+      <!-- Views -->
+      <div class="flex gap-1 bg-white/10 rounded-lg p-1">
+        <button class="nav-btn" id="nav-overview" onclick="setView('overview')"><i class="fa-solid fa-table-cells mr-1"></i>Összesített</button>
+        <button class="nav-btn" id="nav-monthly" onclick="setView('monthly')"><i class="fa-solid fa-calendar mr-1"></i>Havi</button>
+        <button class="nav-btn" id="nav-weekly" onclick="setView('weekly')"><i class="fa-solid fa-calendar-week mr-1"></i>Heti</button>
+        <button class="nav-btn" id="nav-daily" onclick="setView('daily')"><i class="fa-solid fa-calendar-day mr-1"></i>Napi</button>
+      </div>
+
+      <div class="ml-auto flex items-center gap-2">
+        <!-- Generate btn -->
+        <button onclick="runGenerate()" id="gen-btn" class="btn-gold flex items-center gap-2 text-sm">
+          <i class="fa-solid fa-arrows-rotate"></i>
+          <span class="hide-sm">Újragenerálás</span>
+        </button>
+        <!-- Rooms -->
+        <button onclick="openRooms()" class="nav-btn bg-white/10 text-gray-300 hover:text-white">
+          <i class="fa-solid fa-building mr-1"></i><span class="hide-sm">Termek</span>
+        </button>
+        <!-- Logout -->
+        <button onclick="doLogout()" class="nav-btn text-red-400 hover:text-red-300 hover:bg-red-900/20">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT AREA -->
+  <div class="max-w-[1500px] mx-auto px-4 py-6">
+    <div id="content-area"></div>
+  </div>
+
+  <!-- HOUR COUNTER (fixed bottom) -->
+  <div id="hour-counter" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl" style="z-index:40">
+    <div class="max-w-[1500px] mx-auto px-4 py-2">
+      <div id="counter-body" class="flex gap-3 overflow-x-auto scrollbar pb-1 items-center"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===================== ROOMS MODAL ===================== -->
+<div id="rooms-modal" class="hidden modal-bg" onclick="if(event.target===this) closeRooms()">
+  <div class="modal-box">
+    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white rounded-t-xl">
+      <div>
+        <h2 class="cond text-xl font-bold text-gray-900">Tantermek kezelése</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Kapacitás változtatása után kattints az Újragenerálásra</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="addRoom()" class="btn-primary text-sm"><i class="fa-solid fa-plus mr-1"></i>Új terem</button>
+        <button onclick="closeRooms()" class="text-gray-400 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+    </div>
+    <div class="p-6">
+      <div class="grid grid-cols-[1fr_100px_80px] gap-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider px-1">
+        <div>Terem neve</div><div>Kapacitás</div><div>Törlés</div>
+      </div>
+      <div id="rooms-list" class="space-y-2"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CELL EDIT MODAL ===================== -->
+<div id="edit-modal" class="hidden modal-bg" onclick="if(event.target===this) closeEdit()">
+  <div class="modal-box max-w-md">
+    <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
+      <h2 class="cond text-xl font-bold text-gray-900" id="edit-title">Óra szerkesztése</h2>
+      <button onclick="closeEdit()" class="text-gray-400 hover:text-gray-700 p-2 rounded-lg hover:bg-gray-100">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">Tantárgy</label>
+        <select id="edit-subject" class="w-full text-sm"></select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1.5">Terem</label>
+        <select id="edit-room" class="w-full text-sm"></select>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button onclick="saveEdit()" class="btn-primary flex-1">Mentés</button>
+        <button onclick="clearEdit()" class="border border-red-200 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-semibold">Törlés</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SCRIPT ===================== -->
+<script>
+// ============================================================
+// FIREBASE CONFIG — töltsd ki a saját Firebase projekt adataival!
+// ============================================================
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let db;
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+} catch(e) { console.warn('Firebase init error:', e); }
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const START_DATE = new Date('2026-08-24T00:00:00');
+const END_DATE   = new Date('2026-09-26T00:00:00');
+const GROUPS     = ['g1', 'g2'];
+const GROUP_LABELS = { g1: 'I. csoport', g2: 'II. csoport' };
+
+const TIME_SLOTS = [
+  { id: 's1', label: '1–2. óra',   time: '08:00–09:45', hours: 2, morning: true  },
+  { id: 's2', label: '3–4. óra',   time: '10:00–11:45', hours: 2, morning: true  },
+  { id: 's3', label: '5–6. óra',   time: '12:00–13:30', hours: 2, morning: false },
+  { id: 'lunch', label: '7. Ebéd', time: '13:35–15:00', isLunch: true           },
+  { id: 's4', label: '8–9. óra',   time: '15:00–16:45', hours: 2, morning: false },
+  { id: 's5', label: '10–11. óra', time: '17:00–18:45', hours: 2, morning: false },
+];
+const ACTIVE_SLOTS = TIME_SLOTS.filter(s => !s.isLunch);
+
+const SUBJECTS = {
+  altalanos:  { name: 'Általános szolgálati ismeretek', short: 'Ált. Szolgálati',  targetHours: 62,  prog: 60,  theory: 36, practice: 24, colorClass: 'subj-altalanos',  dot: 'dot-altalanos'  },
+  lo:         { name: 'Lőkiképzés',                    short: 'Lőkiképzés',       targetHours: 52,  prog: 52,  theory: 16, practice: 36, colorClass: 'subj-lo',          dot: 'dot-lo',         blockOf4: true },
+  jogi:       { name: 'Jogi ismeretek',                 short: 'Jogi ismeretek',   targetHours: 40,  prog: 40,  theory: 30, practice: 10, colorClass: 'subj-jogi',        dot: 'dot-jogi',       preferMorning: true, blockOf2: true },
+  kozrend:    { name: 'Közrendvédelmi ismeretek',       short: 'Közrendvédelem',   targetHours: 30,  prog: 30,  theory: 24, practice: 6,  colorClass: 'subj-kozrend',     dot: 'dot-kozrend'    },
+  test:       { name: 'Rendőri testnevelés és önvédelem', short: 'Testnevelés',    targetHours: 54,  prog: 54,  theory: 0,  practice: 54, colorClass: 'subj-test',        dot: 'dot-test'       },
+  bevonulas:  { name: 'Bevonulás / Megnyitó / Beiratkozás', short: 'Bevonulás',   targetHours: 6,   prog: 0,   theory: 0,  practice: 0,  colorClass: 'subj-bevonulas',   dot: 'dot-bevonulas'  },
+  osztalyfon: { name: 'Osztályfőnöki óra',              short: 'Osztályfőnöki',   targetHours: 4,   prog: 0,   theory: 0,  practice: 0,  colorClass: 'subj-osztalyfon',  dot: 'dot-osztalyfon' },
+};
+
+const DEFAULT_CLASSROOMS = [
+  { id: 'c1', name: 'O-I (500 fős)',         capacity: 500 },
+  { id: 'c2', name: 'O-II (300 fős)',        capacity: 300 },
+  { id: 'c3', name: 'ROÉK alakuló tér',      capacity: 300 },
+  { id: 'c4', name: 'O-III (150 fős)',       capacity: 150 },
+  { id: 'c5', name: 'O-IV (150 fős)',        capacity: 150 },
+  { id: 'c6', name: 'Sportpálya',            capacity: 500 },
+  { id: 'c7', name: 'Lőtér',                capacity: 150 },
+  { id: 'c8', name: 'R-KOLL MULTI 1',       capacity: 100 },
+  { id: 'c9', name: 'Ludovika külső terület',capacity: 300 },
+];
+
+const HU_DAYS  = ['Vasárnap','Hétfő','Kedd','Szerda','Csütörtök','Péntek','Szombat'];
+const HU_MONTHS= ['Január','Február','Március','Április','Május','Június','Július','Augusztus','Szeptember','Október','November','December'];
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  schedule: {},   // { '2026-08-24': { s1: { g1: {subjectId, classroomId}, g2: {...} }, ... } }
+  fixedDays: {},  // { '2026-08-24': true }
+  classrooms: JSON.parse(JSON.stringify(DEFAULT_CLASSROOMS)),
+};
+let uiState = {
+  view: 'weekly',
+  weekIdx: 0,
+  currentDay: null,
+  isGenerating: false,
+};
+let validDays = [];
+let weeks = [];
+let dragState = null;
+let editCtx = null; // { day, slotId, groupId }
+
+// ============================================================
+// DATE HELPERS
+// ============================================================
+function initDates() {
+  validDays = []; weeks = [];
+  let cur = new Date(START_DATE);
+  while (cur <= END_DATE) {
+    const dow = cur.getDay();
+    if (dow !== 0) { // exclude Sunday
+      validDays.push(toDateStr(cur));
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  let wk = [];
+  validDays.forEach((d, i) => {
+    wk.push(d);
+    const dow = new Date(d).getDay();
+    if (dow === 6 || i === validDays.length - 1) { weeks.push(wk); wk = []; }
+  });
+}
+function toDateStr(d) { return d.toISOString().split('T')[0]; }
+function fmtDate(ds) {
+  const d = new Date(ds);
+  return `${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getDate().toString().padStart(2,'0')}. ${HU_DAYS[d.getDay()]}`;
+}
+function fmtDateShort(ds) {
+  const d = new Date(ds);
+  return `${(d.getMonth()+1)}.${d.getDate().toString().padStart(2,'0')}`;
+}
+function isWeekend(ds) { const d = new Date(ds).getDay(); return d === 0 || d === 6; }
+
+// ============================================================
+// PERSISTENCE (Firestore + localStorage fallback)
+// ============================================================
+async function loadData() {
+  try {
+    const doc = await db.collection('schedules').doc('main').get();
+    if (doc.exists) {
+      const d = doc.data();
+      state.schedule   = d.schedule   || {};
+      state.fixedDays  = d.fixedDays  || {};
+      state.classrooms = d.classrooms || DEFAULT_CLASSROOMS;
+      return;
+    }
+  } catch(e) { console.warn('Firestore load fail:', e); }
+  // localStorage fallback
+  const ls = localStorage.getItem('rtk_schedule_v3');
+  if (ls) {
+    const p = JSON.parse(ls);
+    state.schedule   = p.schedule   || {};
+    state.fixedDays  = p.fixedDays  || {};
+    state.classrooms = p.classrooms || DEFAULT_CLASSROOMS;
+  } else {
+    generateAlgorithm(true); // first run
+  }
+}
+async function saveData() {
+  const data = { schedule: state.schedule, fixedDays: state.fixedDays, classrooms: state.classrooms, savedAt: new Date().toISOString() };
+  try { await db.collection('schedules').doc('main').set(data); } catch(e) {}
+  localStorage.setItem('rtk_schedule_v3', JSON.stringify(data));
+  renderContent();
+  renderCounter();
+}
+
+// ============================================================
+// SCHEDULE GENERATION ALGORITHM
+// ============================================================
+function generateAlgorithm(isFirstRun = false) {
+  uiState.isGenerating = true;
+  const btn = document.getElementById('gen-btn');
+  if (btn) btn.innerHTML = '<i class="fa-solid fa-circle-notch spin mr-1"></i>Generálás...';
+
+  setTimeout(() => {
+    let newSched = JSON.parse(JSON.stringify(state.schedule));
+
+    // --- Pre-seed first day ---
+    const day1 = '2026-08-24';
+    if (!state.fixedDays[day1]) {
+      newSched[day1] = {
+        s1: { g1: { subjectId: 'bevonulas', classroomId: 'c3' }, g2: { subjectId: 'bevonulas', classroomId: 'c3' } },
+        s2: { g1: { subjectId: 'bevonulas', classroomId: 'c1' }, g2: { subjectId: 'bevonulas', classroomId: 'c1' } },
+        s3: { g1: { subjectId: 'bevonulas', classroomId: 'c4' }, g2: { subjectId: 'bevonulas', classroomId: 'c5' } },
+        s4: { g1: { subjectId: 'altalanos', classroomId: 'c1' }, g2: { subjectId: 'altalanos', classroomId: 'c1' } },
+        s5: { g1: { subjectId: 'test',      classroomId: 'c6' }, g2: { subjectId: 'test',      classroomId: 'c6' } },
+      };
+    }
+
+    // Quotas — hours remaining per group
+    const baseQuotas = {
+      altalanos:  { total: 56, g1: 0, g2: 0 }, // 62-6 (first day)
+      lo:         { total: 52, g1: 0, g2: 0 },
+      jogi:       { total: 40, g1: 0, g2: 0 },
+      kozrend:    { total: 30, g1: 0, g2: 0 },
+      test:       { total: 48, g1: 0, g2: 0 }, // 54-6 (first day)
+      osztalyfon: { total: 4,  g1: 0, g2: 0 },
+    };
+    // Convert hours → slots (each slot = 2 hours)
+    let quotas = {};
+    Object.entries(baseQuotas).forEach(([k, v]) => { quotas[k] = Math.ceil(v.total / 2); });
+
+    // Subtract already-scheduled (non-first) days
+    validDays.forEach(day => {
+      if (day === day1) return;
+      ACTIVE_SLOTS.forEach(slot => {
+        GROUPS.forEach(g => {
+          const sj = newSched[day]?.[slot.id]?.[g]?.subjectId;
+          if (sj && quotas[sj] !== undefined) quotas[sj]--;
+        });
+      });
+    });
+
+    // Weighted subject pool
+    function weightedPick(pool, weights) {
+      const total = pool.reduce((s, k) => s + (weights[k] || 0), 0);
+      if (total <= 0) return pool[Math.floor(Math.random() * pool.length)];
+      let r = Math.random() * total, acc = 0;
+      for (const k of pool) { acc += (weights[k] || 0); if (r <= acc) return k; }
+      return pool[0];
+    }
+
+    validDays.forEach(day => {
+      if (day === day1 || state.fixedDays[day]) return;
+      const dow = new Date(day).getDay();
+      const isSat = dow === 6;
+
+      newSched[day] = {};
+      const slotKeys = isSat ? ['s1','s2','s3'] : ['s1','s2','s3','s4','s5'];
+
+      GROUPS.forEach(g => {
+        const groupSlots = [...slotKeys];
+        let used = []; // subjects used today for this group
+
+        // RULE 1: Lőkiképzés — 4h block (2 consecutive slots)
+        const loSlots = quotas.lo > 1;
+        if (loSlots && Math.random() > 0.55) {
+          const pairs = [['s1','s2'],['s2','s3'],['s4','s5']].filter(p =>
+            groupSlots.includes(p[0]) && groupSlots.includes(p[1])
+          );
+          if (pairs.length) {
+            const pair = pairs[Math.floor(Math.random() * pairs.length)];
+            pair.forEach(sl => {
+              newSched[day][sl] = newSched[day][sl] || {};
+              newSched[day][sl][g] = { subjectId: 'lo', classroomId: 'c7' };
+              groupSlots.splice(groupSlots.indexOf(sl), 1);
+            });
+            used.push('lo');
+            quotas.lo = Math.max(0, quotas.lo - 2);
+          }
+        }
+
+        // RULE 2: Jogi — morning only, 2h slot
+        if (quotas.jogi > 0 && !used.includes('jogi') && Math.random() > 0.3) {
+          const morn = groupSlots.filter(s => ['s1','s2'].includes(s));
+          if (morn.length) {
+            const sl = morn[Math.floor(Math.random() * morn.length)];
+            newSched[day][sl] = newSched[day][sl] || {};
+            newSched[day][sl][g] = { subjectId: 'jogi', classroomId: 'c1' };
+            groupSlots.splice(groupSlots.indexOf(sl), 1);
+            used.push('jogi'); quotas.jogi = Math.max(0, quotas.jogi - 1);
+          }
+        }
+
+        // RULE 3: Osztályfőnöki (once a week approx)
+        if (quotas.osztalyfon > 0 && !used.includes('osztalyfon') && Math.random() > 0.88) {
+          const sl = groupSlots[Math.floor(Math.random() * groupSlots.length)];
+          if (sl) {
+            newSched[day][sl] = newSched[day][sl] || {};
+            newSched[day][sl][g] = { subjectId: 'osztalyfon', classroomId: 'c4' };
+            groupSlots.splice(groupSlots.indexOf(sl), 1);
+            used.push('osztalyfon'); quotas.osztalyfon = Math.max(0, quotas.osztalyfon - 1);
+          }
+        }
+
+        // RULE 4: Fill remaining slots
+        const remaining = ['altalanos','test','kozrend','jogi','lo'].filter(k => !used.includes(k));
+        const weights = {};
+        remaining.forEach(k => weights[k] = Math.max(0, quotas[k] || 0));
+
+        groupSlots.forEach(sl => {
+          const avail = remaining.filter(k => quotas[k] > 0);
+          const subj = avail.length ? weightedPick(avail, weights) : 'altalanos';
+          // Assign classroom
+          let room = assignRoom(subj, g, day, sl, newSched);
+          newSched[day][sl] = newSched[day][sl] || {};
+          newSched[day][sl][g] = { subjectId: subj, classroomId: room };
+          used.push(subj); quotas[subj] = Math.max(0, (quotas[subj] || 0) - 1);
+        });
+      });
+
+      // Try to combine groups that have same subject into larger room
+      ACTIVE_SLOTS.forEach(slot => {
+        if (!slotKeys.includes(slot.id)) return;
+        const s = newSched[day]?.[slot.id];
+        if (!s) return;
+        if (s.g1?.subjectId && s.g1.subjectId === s.g2?.subjectId) {
+          const bigRoom = state.classrooms.find(r => r.capacity >= 300 && r.id !== 'c6' && r.id !== 'c7');
+          if (bigRoom) { s.g1.classroomId = bigRoom.id; s.g2.classroomId = bigRoom.id; }
+        }
+      });
+    });
+
+    state.schedule = newSched;
+    uiState.isGenerating = false;
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-arrows-rotate mr-1"></i><span class="hide-sm">Újragenerálás</span>';
+    saveData();
+  }, 80);
+}
+
+function assignRoom(subjectId, group, day, slotId, sched) {
+  if (subjectId === 'lo')   return 'c7'; // Lőtér
+  if (subjectId === 'test') return 'c6'; // Sportpálya
+  // Check same slot other group
+  const otherGroup = group === 'g1' ? 'g2' : 'g1';
+  const otherRoom  = sched[day]?.[slotId]?.[otherGroup]?.classroomId;
+  const small = state.classrooms.filter(r => r.capacity >= 140 && r.id !== 'c6' && r.id !== 'c7' && r.id !== otherRoom);
+  if (small.length) return small[Math.floor(Math.random() * small.length)].id;
+  return 'c4';
+}
+
+// ============================================================
+// HOUR COUNTER
+// ============================================================
+function countHours() {
+  const counts = {};
+  Object.keys(SUBJECTS).forEach(k => { counts[k] = { g1: 0, g2: 0 }; });
+  Object.values(state.schedule).forEach(day => {
+    ACTIVE_SLOTS.forEach(slot => {
+      GROUPS.forEach(g => {
+        const sj = day?.[slot.id]?.[g]?.subjectId;
+        if (sj && counts[sj]) counts[sj][g] += 2;
+      });
+    });
+  });
+  // Return per-group average
+  const result = {};
+  Object.keys(counts).forEach(k => {
+    result[k] = Math.round((counts[k].g1 + counts[k].g2) / 2);
+  });
+  return result;
+}
+
+function renderCounter() {
+  const counts = countHours();
+  const el = document.getElementById('counter-body');
+  if (!el) return;
+  let html = '<div class="text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap mr-2 hide-sm">Tervezett órák:</div>';
+  let totalPlanned = 0, totalTarget = 0;
+  Object.entries(SUBJECTS).forEach(([id, s]) => {
+    const got = counts[id] || 0;
+    const tgt = s.targetHours;
+    totalPlanned += got; totalTarget += tgt;
+    const pct = tgt > 0 ? Math.min(100, Math.round(got/tgt*100)) : (got > 0 ? 100 : 0);
+    const fillClass = got > tgt ? 'prog-over' : (got >= tgt ? 'prog-ok' : 'prog-fill' + (pct > 60 ? '' : ' bg-blue-400'));
+    const dotClass = s.dot;
+    html += `
+      <div class="flex-shrink-0 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 flex flex-col gap-1" style="min-width:130px">
+        <div class="flex items-center gap-1.5">
+          <div class="ov-dot ${dotClass}"></div>
+          <span class="text-xs font-semibold text-gray-700 whitespace-nowrap">${s.short}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold ${got > tgt ? 'text-amber-600' : (got < tgt * 0.8 ? 'text-red-500' : 'text-green-700')}">${got}</span>
+          <span class="text-xs text-gray-400">/ ${tgt}h</span>
+          <div class="prog-bar flex-1"><div class="${got > tgt ? 'prog-over' : 'prog-ok'} prog-fill" style="width:${pct}%"></div></div>
+        </div>
+      </div>`;
+  });
+  // Total
+  const totalPct = totalTarget > 0 ? Math.min(100, Math.round(totalPlanned/totalTarget*100)) : 0;
+  html += `
+    <div class="flex-shrink-0 border-l border-gray-200 pl-3 ml-1 flex flex-col justify-center">
+      <div class="text-xs text-gray-500 hide-sm">Összesen</div>
+      <div class="text-sm font-bold ${totalPlanned > totalTarget ? 'text-amber-600' : 'text-gray-900'}">${totalPlanned} / ${totalTarget}h</div>
+      <div class="prog-bar w-20"><div class="prog-ok prog-fill" style="width:${totalPct}%"></div></div>
+    </div>`;
+  el.innerHTML = html;
+}
+
+// ============================================================
+// DRAG & DROP
+// ============================================================
+window.handleDragStart = function(ev, day, slotId, groupId) {
+  dragState = { day, slotId, groupId };
+  ev.currentTarget.classList.add('dragging');
+  ev.dataTransfer.effectAllowed = 'move';
+};
+window.handleDragEnd = function(ev) {
+  ev.currentTarget.classList.remove('dragging');
+};
+window.handleDragOver = function(ev, day, slotId, groupId) {
+  ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+  ev.currentTarget.classList.add('drag-over');
+};
+window.handleDragLeave = function(ev) {
+  ev.currentTarget.classList.remove('drag-over');
+};
+window.handleDrop = function(ev, targetDay, targetSlotId, targetGroupId) {
+  ev.preventDefault(); ev.currentTarget.classList.remove('drag-over');
+  if (!dragState || state.fixedDays[targetDay] || state.fixedDays[dragState.day]) return;
+  const { day: srcDay, slotId: srcSlot, groupId: srcGroup } = dragState;
+  const srcA = state.schedule[srcDay]?.[srcSlot]?.[srcGroup];
+  const tgtA = state.schedule[targetDay]?.[targetSlotId]?.[targetGroupId];
+  if (!state.schedule[targetDay]) state.schedule[targetDay] = {};
+  if (!state.schedule[targetDay][targetSlotId]) state.schedule[targetDay][targetSlotId] = {};
+  if (!state.schedule[srcDay]) state.schedule[srcDay] = {};
+  if (!state.schedule[srcDay][srcSlot]) state.schedule[srcDay][srcSlot] = {};
+  state.schedule[targetDay][targetSlotId][targetGroupId] = srcA;
+  state.schedule[srcDay][srcSlot][srcGroup] = tgtA;
+  dragState = null;
+  saveData();
+};
+
+// ============================================================
+// EDIT MODAL
+// ============================================================
+window.openEdit = function(day, slotId, groupId) {
+  if (state.fixedDays[day]) return;
+  editCtx = { day, slotId, groupId };
+  const cur = state.schedule[day]?.[slotId]?.[groupId];
+  const d = new Date(day);
+  document.getElementById('edit-title').textContent =
+    `${fmtDate(day)} · ${TIME_SLOTS.find(s=>s.id===slotId)?.label} · ${GROUP_LABELS[groupId]}`;
+  // Subjects
+  let subHtml = '<option value="">— Üres —</option>';
+  Object.entries(SUBJECTS).forEach(([id, s]) => {
+    subHtml += `<option value="${id}" ${cur?.subjectId===id?'selected':''}>${s.name}</option>`;
+  });
+  document.getElementById('edit-subject').innerHTML = subHtml;
+  // Rooms
+  let rmHtml = '';
+  state.classrooms.forEach(r => {
+    rmHtml += `<option value="${r.id}" ${cur?.classroomId===r.id?'selected':''}>${r.name} (${r.capacity} fő)</option>`;
+  });
+  document.getElementById('edit-room').innerHTML = rmHtml;
+  document.getElementById('edit-modal').classList.remove('hidden');
+};
+window.saveEdit = function() {
+  if (!editCtx) return;
+  const { day, slotId, groupId } = editCtx;
+  const sj = document.getElementById('edit-subject').value;
+  const rm = document.getElementById('edit-room').value;
+  if (!state.schedule[day]) state.schedule[day] = {};
+  if (!state.schedule[day][slotId]) state.schedule[day][slotId] = {};
+  if (sj) state.schedule[day][slotId][groupId] = { subjectId: sj, classroomId: rm };
+  else delete state.schedule[day][slotId][groupId];
+  closeEdit(); saveData();
+};
+window.clearEdit = function() {
+  if (!editCtx) return;
+  const { day, slotId, groupId } = editCtx;
+  if (state.schedule[day]?.[slotId]) delete state.schedule[day][slotId][groupId];
+  closeEdit(); saveData();
+};
+window.closeEdit = function() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  editCtx = null;
+};
+
+// ============================================================
+// ROOMS MODAL
+// ============================================================
+window.openRooms = function() {
+  renderRoomsList();
+  document.getElementById('rooms-modal').classList.remove('hidden');
+};
+window.closeRooms = function() {
+  document.getElementById('rooms-modal').classList.add('hidden');
+};
+function renderRoomsList() {
+  const el = document.getElementById('rooms-list');
+  el.innerHTML = state.classrooms.map((r, idx) => `
+    <div class="grid grid-cols-[1fr_100px_80px] gap-3 items-center bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+      <input type="text" value="${r.name}" onchange="updateRoom(${idx},'name',this.value)"
+        class="text-sm w-full" style="padding:.4rem .65rem">
+      <div class="relative">
+        <input type="number" value="${r.capacity}" onchange="updateRoom(${idx},'capacity',this.value)"
+          class="text-sm w-full pl-8" style="padding:.4rem .5rem .4rem 2rem">
+        <i class="fa-solid fa-users absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+      </div>
+      <button onclick="deleteRoom('${r.id}')" class="text-red-500 hover:bg-red-50 rounded-lg py-1.5 text-sm">
+        <i class="fa-solid fa-trash-can"></i>
+      </button>
+    </div>`).join('');
+}
+window.updateRoom = function(idx, field, val) {
+  state.classrooms[idx][field] = field === 'capacity' ? (parseInt(val)||0) : val;
+  saveData();
+};
+window.addRoom = function() {
+  state.classrooms.push({ id: `c${Date.now()}`, name: 'Új terem', capacity: 150 });
+  renderRoomsList(); saveData();
+};
+window.deleteRoom = function(id) {
+  state.classrooms = state.classrooms.filter(r => r.id !== id);
+  renderRoomsList(); saveData();
+};
+
+// ============================================================
+// GLOBAL ACTIONS
+// ============================================================
+window.setView = function(v) {
+  uiState.view = v;
+  ['overview','monthly','weekly','daily'].forEach(n => {
+    const b = document.getElementById('nav-'+n);
+    if (b) b.className = 'nav-btn' + (v===n?' active':'');
+  });
+  renderContent();
+};
+window.changeWeek = function(dir) {
+  uiState.weekIdx = Math.max(0, Math.min(weeks.length-1, uiState.weekIdx + dir));
+  renderContent();
+};
+window.changeMonth = function(dir) {
+  // shift by approximate month
+  uiState.weekIdx = Math.max(0, Math.min(weeks.length-1, uiState.weekIdx + dir * 4));
+  renderContent();
+};
+window.setDay = function(d) {
+  uiState.currentDay = d; setView('daily');
+};
+window.toggleDayLock = function(day) {
+  state.fixedDays[day] = !state.fixedDays[day]; saveData();
+};
+window.runGenerate = function() {
+  if (uiState.isGenerating) return;
+  generateAlgorithm(false);
+};
+
+// ============================================================
+// RENDER HELPERS
+// ============================================================
+function subjectCard(assignment, groupLabel, day, slotId, groupId, compact) {
+  if (!assignment || !assignment.subjectId) {
+    return `<div class="lesson-card subj-empty border-dashed flex items-center justify-center text-gray-400 cursor-pointer h-10"
+      draggable="false"
+      ondragover="handleDragOver(event,'${day}','${slotId}','${groupId}')"
+      ondragleave="handleDragLeave(event)"
+      ondrop="handleDrop(event,'${day}','${slotId}','${groupId}')"
+      onclick="openEdit('${day}','${slotId}','${groupId}')">
+      <i class="fa-solid fa-plus text-xs"></i>
+    </div>`;
+  }
+  const s = SUBJECTS[assignment.subjectId];
+  const room = state.classrooms.find(r => r.id === assignment.classroomId);
+  const cc = s?.colorClass || 'subj-empty';
+  const locked = state.fixedDays[day];
+  return `
+    <div class="lesson-card ${cc} ${locked?'cursor-default':''}"
+      draggable="${!locked}"
+      ondragstart="${!locked?`handleDragStart(event,'${day}','${slotId}','${groupId}')`:'return false'}"
+      ondragend="handleDragEnd(event)"
+      ondragover="handleDragOver(event,'${day}','${slotId}','${groupId}')"
+      ondragleave="handleDragLeave(event)"
+      ondrop="handleDrop(event,'${day}','${slotId}','${groupId}')"
+      ondblclick="openEdit('${day}','${slotId}','${groupId}')">
+      <div class="font-bold opacity-60 text-[10px]">${groupLabel}</div>
+      <div class="font-semibold leading-snug">${compact ? (s?.short||'?') : (s?.name||'?')}</div>
+      ${room ? `<div class="mt-0.5 opacity-70 text-[10px]"><i class="fa-solid fa-location-dot mr-0.5"></i>${room.name}</div>` : ''}
+    </div>`;
+}
+
+// ============================================================
+// WEEKLY VIEW
+// ============================================================
+function renderWeekly() {
+  const days = weeks[uiState.weekIdx] || [];
+  const monthLabel = days.length ? `${HU_MONTHS[new Date(days[0]).getMonth()]} · ${uiState.weekIdx+1}. hét` : '';
+
+  let html = `
+  <div class="space-y-4" style="padding-bottom:100px">
+    <!-- Week nav -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <button onclick="changeWeek(-1)" ${uiState.weekIdx===0?'disabled':''} class="w-9 h-9 rounded-full hover:bg-gray-100 disabled:opacity-40 flex items-center justify-center text-gray-600">
+          <i class="fa-solid fa-chevron-left"></i></button>
+        <h2 class="cond text-xl font-bold text-gray-800">${monthLabel}</h2>
+        <button onclick="changeWeek(1)" ${uiState.weekIdx===weeks.length-1?'disabled':''} class="w-9 h-9 rounded-full hover:bg-gray-100 disabled:opacity-40 flex items-center justify-center text-gray-600">
+          <i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+        <i class="fa-solid fa-hand-pointer text-blue-400"></i>
+        Húzd a cellákat az áthelyezéshez · Dupla kattintás = szerkesztés
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto scrollbar">
+      <div style="min-width:${Math.max(800, days.length*170+130)}px">
+        <!-- Header -->
+        <div class="grid border-b border-gray-200 bg-gray-50" style="grid-template-columns:130px repeat(${days.length},1fr)">
+          <div class="p-4 text-xs font-semibold text-gray-500 uppercase tracking-wider border-r border-gray-200 flex items-center">Idősáv</div>
+          ${days.map(day => {
+            const fixed = state.fixedDays[day];
+            const wend  = isWeekend(day);
+            const parts = fmtDate(day).split(' ');
+            return `<div class="p-3 text-center border-r border-gray-200 last:border-r-0 ${fixed?'day-locked':''} ${wend?'weekend-col':''}">
+              <div class="flex justify-between items-center mb-2">
+                <button onclick="toggleDayLock('${day}')" title="${fixed?'Feloldás':'Fixálás'}"
+                  class="w-7 h-7 rounded-md flex items-center justify-center transition-colors text-xs ${fixed?'bg-amber-100 text-amber-700':'hover:bg-gray-200 text-gray-400'}">
+                  <i class="fa-solid ${fixed?'fa-lock':'fa-lock-open'}"></i></button>
+                <button onclick="setDay('${day}')" class="text-[10px] text-blue-600 hover:underline">Napi nézet</button>
+              </div>
+              <div class="cond font-bold text-gray-900">${parts[0]}</div>
+              <div class="text-xs text-gray-500 font-medium">${parts[1]}</div>
+              ${fixed?'<div class="text-[9px] bg-amber-100 text-amber-700 rounded px-1 mt-1 font-semibold">FIXÁLT</div>':''}
+            </div>`;
+          }).join('')}
+        </div>
+
+        <!-- Rows -->
+        ${TIME_SLOTS.map(slot => {
+          if (slot.isLunch) {
+            return `<div class="grid border-b border-gray-100 lunch-row" style="grid-template-columns:130px repeat(${days.length},1fr)">
+              <div class="p-4 border-r border-gray-200 flex flex-col justify-center bg-amber-50">
+                <div class="cond font-bold text-amber-800 text-sm">${slot.label}</div>
+                <div class="text-xs text-amber-600">${slot.time}</div>
+              </div>
+              ${days.map(() => `<div class="p-3 flex items-center justify-center border-r border-gray-100 last:border-r-0">
+                <span class="text-xs font-semibold text-amber-700"><i class="fa-solid fa-utensils mr-1.5"></i>Ebéd</span>
+              </div>`).join('')}
+            </div>`;
+          }
+          return `<div class="grid border-b border-gray-100 last:border-b-0" style="grid-template-columns:130px repeat(${days.length},1fr)">
+            <div class="p-4 border-r border-gray-200 bg-gray-50 flex flex-col justify-center">
+              <div class="cond font-bold text-gray-800 text-sm">${slot.label}</div>
+              <div class="text-xs text-gray-400">${slot.time}</div>
+            </div>
+            ${days.map(day => {
+              const slotData = state.schedule[day]?.[slot.id];
+              const g1 = slotData?.g1, g2 = slotData?.g2;
+              const combined = g1 && g2 && g1.subjectId === g2.subjectId && g1.classroomId === g2.classroomId;
+              const wend = isWeekend(day);
+              let inner;
+              if (combined) {
+                inner = subjectCard(g1, 'I+II. cs.', day, slot.id, 'g1', false);
+              } else {
+                inner = `<div class="flex flex-col gap-1.5 h-full">
+                  ${subjectCard(g1, 'I. cs.', day, slot.id, 'g1', true)}
+                  ${subjectCard(g2, 'II. cs.', day, slot.id, 'g2', true)}
+                </div>`;
+              }
+              return `<div class="drop-cell ${wend?'weekend-col':''}
+                ondragover="handleDragOver(event,'${day}','${slot.id}','g1')"
+                ondragleave="handleDragLeave(event)"
+                ondrop="handleDrop(event,'${day}','${slot.id}','g1')">
+                ${inner}
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+  return html;
+}
+
+// ============================================================
+// DAILY VIEW
+// ============================================================
+function renderDaily() {
+  const day = uiState.currentDay || validDays[0];
+  const fixed = state.fixedDays[day];
+  const dayIdx = validDays.indexOf(day);
+
+  return `
+  <div class="max-w-2xl mx-auto space-y-4" style="padding-bottom:100px">
+    <!-- Nav -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center justify-between gap-3">
+      <button onclick="setDay('${validDays[Math.max(0,dayIdx-1)]}')" ${dayIdx===0?'disabled':''} class="w-9 h-9 rounded-full hover:bg-gray-100 disabled:opacity-40 flex items-center justify-center text-gray-600">
+        <i class="fa-solid fa-chevron-left"></i></button>
+      <div class="text-center">
+        <h2 class="cond text-2xl font-bold text-gray-900">${fmtDate(day)}</h2>
+        ${fixed?'<span class="text-xs bg-amber-100 text-amber-700 rounded px-2 py-0.5 font-semibold">FIXÁLT NAP</span>':''}
+      </div>
+      <button onclick="setDay('${validDays[Math.min(validDays.length-1,dayIdx+1)]}')" ${dayIdx===validDays.length-1?'disabled':''} class="w-9 h-9 rounded-full hover:bg-gray-100 disabled:opacity-40 flex items-center justify-center text-gray-600">
+        <i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+
+    <!-- Lock + Back -->
+    <div class="flex gap-3">
+      <button onclick="toggleDayLock('${day}')" class="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${fixed?'bg-amber-50 border-amber-200 text-amber-700':'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}">
+        <i class="fa-solid ${fixed?'fa-lock':'fa-lock-open'}"></i>
+        ${fixed?'Fixált – Kattints a feloldáshoz':'Nap fixálása'}
+      </button>
+      <button onclick="setView('weekly')" class="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-semibold">
+        <i class="fa-solid fa-calendar-week"></i>Heti nézet
+      </button>
+    </div>
+
+    <!-- Slots -->
+    ${TIME_SLOTS.map(slot => {
+      if (slot.isLunch) return `
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-4">
+          <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-utensils text-amber-600 text-xl"></i></div>
+          <div>
+            <div class="cond font-bold text-amber-800 text-lg">${slot.label}</div>
+            <div class="text-sm text-amber-600">${slot.time}</div>
+          </div>
+        </div>`;
+
+      const slotData = state.schedule[day]?.[slot.id];
+      const g1 = slotData?.g1, g2 = slotData?.g2;
+      const combined = g1 && g2 && g1.subjectId === g2.subjectId && g1.classroomId === g2.classroomId;
+
+      return `
+        <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+          <div class="px-5 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+            <div>
+              <span class="cond font-bold text-gray-900 text-lg">${slot.label}</span>
+              <span class="text-sm text-gray-500 ml-2">${slot.time}</span>
+            </div>
+            <span class="text-xs text-gray-400">${slot.hours}h</span>
+          </div>
+          <div class="p-4">
+            ${combined ? renderDayCard(g1, 'I+II. csoport', day, slot.id, 'g1') :
+              `<div class="grid grid-cols-2 gap-4">
+                ${renderDayCard(g1, 'I. csoport', day, slot.id, 'g1')}
+                ${renderDayCard(g2, 'II. csoport', day, slot.id, 'g2')}
+              </div>`}
+          </div>
+        </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderDayCard(assignment, label, day, slotId, groupId) {
+  const s = assignment ? SUBJECTS[assignment.subjectId] : null;
+  const room = assignment ? state.classrooms.find(r => r.id === assignment.classroomId) : null;
+  const cc = s?.colorClass || 'subj-empty';
+  return `
+    <div class="rounded-xl border p-4 ${cc} cursor-pointer hover:shadow-md transition-all"
+      onclick="openEdit('${day}','${slotId}','${groupId}')">
+      <div class="text-xs font-semibold opacity-60 mb-2">${label}</div>
+      <div class="cond text-lg font-bold leading-tight">${s?.name || '— Üres —'}</div>
+      ${room ? `<div class="mt-2 text-xs opacity-70"><i class="fa-solid fa-location-dot mr-1"></i>${room.name} (${room.capacity} fő)</div>` : ''}
+      <div class="mt-2 text-xs opacity-60 italic">Kattints a szerkesztéshez</div>
+    </div>`;
+}
+
+// ============================================================
+// OVERVIEW VIEW
+// ============================================================
+function renderOverview() {
+  let html = `<div class="space-y-6" style="padding-bottom:100px">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
+      <h2 class="cond text-xl font-bold text-gray-800">Teljes képzési időszak áttekintése</h2>
+      <div class="flex flex-wrap gap-2">
+        ${Object.entries(SUBJECTS).map(([id,s]) =>
+          `<div class="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-full px-3 py-1">
+            <div class="ov-dot ${s.dot}"></div>
+            <span class="text-xs text-gray-700">${s.short}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  weeks.forEach((wkDays, wi) => {
+    if (!wkDays.length) return;
+    const mon = wkDays[0];
+    html += `<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="cond font-bold text-gray-800">${wi+1}. hét — ${HU_MONTHS[new Date(mon).getMonth()]} ${new Date(mon).getDate()}.–${new Date(wkDays[wkDays.length-1]).getDate()}.</h3>
+        <button onclick="uiState.weekIdx=${wi};setView('weekly')" class="text-xs text-blue-600 hover:underline">Szerkesztés →</button>
+      </div>
+      <div class="grid p-4 gap-3" style="grid-template-columns:repeat(${wkDays.length}, 1fr)">
+      ${wkDays.map(day => {
+        const fixed = state.fixedDays[day];
+        const wend  = isWeekend(day);
+        const slots = ACTIVE_SLOTS.map(s => {
+          const g1 = state.schedule[day]?.[s.id]?.g1;
+          return g1?.subjectId;
+        }).filter(Boolean);
+        return `<div class="rounded-xl border p-3 cursor-pointer hover:shadow-md transition-all ${fixed?'bg-amber-50 border-amber-200':'bg-gray-50 border-gray-200'} ${wend?'opacity-75':''}"
+          onclick="setDay('${day}')">
+          <div class="cond font-bold text-sm text-gray-900 mb-1">${fmtDateShort(day)}</div>
+          <div class="text-xs text-gray-500 mb-2">${HU_DAYS[new Date(day).getDay()]}</div>
+          <div class="flex flex-col gap-1">
+            ${slots.length ? slots.map(sj => `<div class="flex items-center gap-1.5">
+              <div class="ov-dot ${SUBJECTS[sj]?.dot||''}"></div>
+              <span class="text-xs text-gray-600">${SUBJECTS[sj]?.short||sj}</span>
+            </div>`).join('') : '<div class="text-xs text-gray-400 italic">Üres nap</div>'}
+          </div>
+          ${fixed?'<div class="text-[9px] mt-2 text-amber-700 font-bold"><i class="fa-solid fa-lock mr-0.5"></i>FIXÁLT</div>':''}
+        </div>`;
+      }).join('')}
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+// ============================================================
+// MONTHLY VIEW
+// ============================================================
+function renderMonthly() {
+  // Get current month based on weekIdx
+  const refDay = weeks[uiState.weekIdx]?.[0] || validDays[0];
+  const month = new Date(refDay).getMonth();
+  const year  = new Date(refDay).getFullYear();
+
+  // Find weeks in this month
+  const monthWeeks = weeks.filter(wk => {
+    return wk.some(d => new Date(d).getMonth() === month);
+  });
+
+  let html = `<div class="space-y-4" style="padding-bottom:100px">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center justify-between gap-3">
+      <button onclick="changeMonth(-1)" class="w-9 h-9 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-600">
+        <i class="fa-solid fa-chevron-left"></i></button>
+      <h2 class="cond text-2xl font-bold text-gray-800">${HU_MONTHS[month]} ${year}</h2>
+      <button onclick="changeMonth(1)" class="w-9 h-9 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-600">
+        <i class="fa-solid fa-chevron-right"></i></button>
+    </div>
+
+    <!-- Day headers -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="grid grid-cols-6 border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        ${['Hétfő','Kedd','Szerda','Csütörtök','Péntek','Szombat'].map(d=>
+          `<div class="p-3 text-center border-r border-gray-200 last:border-r-0">${d}</div>`).join('')}
+      </div>`;
+
+  monthWeeks.forEach(wk => {
+    // Build M-Sa 6-col row (skip Sunday)
+    const dayMap = {};
+    wk.forEach(d => { const dow = new Date(d).getDay(); if (dow !== 0) dayMap[dow] = d; });
+    html += `<div class="grid grid-cols-6 border-b border-gray-100 last:border-b-0">`;
+    for (let dow = 1; dow <= 6; dow++) {
+      const day = dayMap[dow];
+      if (!day || new Date(day).getMonth() !== month) {
+        html += `<div class="p-4 border-r border-gray-100 last:border-r-0 bg-gray-50/50"></div>`;
+        continue;
+      }
+      const fixed = state.fixedDays[day];
+      const g1Subjects = ACTIVE_SLOTS.map(s => state.schedule[day]?.[s.id]?.g1?.subjectId).filter(Boolean);
+      html += `<div class="p-3 border-r border-gray-100 last:border-r-0 cursor-pointer hover:bg-blue-50 transition-colors ${fixed?'bg-amber-50':''}"
+        onclick="setDay('${day}')">
+        <div class="cond font-bold text-gray-900">${new Date(day).getDate()}</div>
+        <div class="mt-1.5 flex flex-col gap-0.5">
+          ${g1Subjects.slice(0,3).map(sj => `
+            <div class="flex items-center gap-1">
+              <div class="w-2 h-2 rounded-full flex-shrink-0 ${SUBJECTS[sj]?.dot||''}"></div>
+              <span class="text-xs text-gray-600 truncate">${SUBJECTS[sj]?.short||sj}</span>
+            </div>`).join('')}
+          ${g1Subjects.length > 3 ? `<div class="text-xs text-gray-400">+${g1Subjects.length-3} más</div>` : ''}
+          ${g1Subjects.length===0?'<div class="text-xs text-gray-400 italic">Üres</div>':''}
+        </div>
+        ${fixed?'<div class="text-[9px] mt-1 text-amber-700 font-bold"><i class="fa-solid fa-lock mr-0.5"></i>FIX</div>':''}
+      </div>`;
+    }
+    html += `</div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+// ============================================================
+// MAIN RENDER
+// ============================================================
+function renderContent() {
+  const el = document.getElementById('content-area');
+  if (!el) return;
+  switch(uiState.view) {
+    case 'overview': el.innerHTML = renderOverview(); break;
+    case 'monthly':  el.innerHTML = renderMonthly();  break;
+    case 'weekly':   el.innerHTML = renderWeekly();   break;
+    case 'daily':    el.innerHTML = renderDaily();    break;
+  }
+  renderCounter();
+}
+
+// ============================================================
+// LOGIN / LOGOUT
+// ============================================================
+window.togglePw = function() {
+  const inp = document.getElementById('pw-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+};
+
+window.doLogin = async function() {
+  const pw = document.getElementById('pw-input').value.trim();
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  if (!pw) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-circle-notch spin mr-2"></i>Ellenőrzés...';
+  errEl.classList.add('hidden');
+  try {
+    let ok = false;
+    try {
+      const doc = await db.collection('users').doc('admin').get();
+      if (doc.exists && doc.data().password === pw) ok = true;
+    } catch(e) {
+      // fallback: accept hardcoded if Firebase not configured
+      ok = (pw === 'jelszo123');
+    }
+    if (ok) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').classList.remove('hidden');
+      await loadData();
+      setView('weekly');
+    } else {
+      errEl.classList.remove('hidden');
+      document.getElementById('pw-input').value = '';
+      document.getElementById('pw-input').focus();
+    }
+  } catch(e) {
+    errEl.textContent = 'Hiba a belépés során: ' + e.message;
+    errEl.classList.remove('hidden');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-right-to-bracket mr-2"></i>Belépés';
+};
+
+window.doLogout = function() {
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('pw-input').value = '';
+};
+
+// ============================================================
+// INIT
+// ============================================================
+initDates();
+// Default to weekly view when logged in
+document.getElementById('nav-weekly').classList.add('active');
+</script>
+</body>
+</html>            { id: 's1', label: '1-2. óra', time: '08:00 - 09:45', isMorning: true },
             { id: 's2', label: '3-4. óra', time: '10:00 - 11:45', isMorning: true },
             { id: 's3', label: '5-6. óra', time: '12:00 - 13:45', isMorning: false },
             { id: 'lunch', label: 'Ebéd', time: '13:35 - 15:00', isMorning: false, isLunch: true },
